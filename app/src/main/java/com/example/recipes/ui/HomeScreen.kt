@@ -1,0 +1,418 @@
+package com.example.recipes.ui
+
+import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.recipes.data.ApiClient
+import com.example.recipes.data.Recipe
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.ui.platform.LocalViewConfiguration
+import com.example.recipes.data.Type
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+fun HomeScreen(
+    onRecipeClick: (Int) -> Unit,
+    viewModel: HomeViewModel = viewModel()
+) {
+    val context = LocalContext.current
+
+    // Перезагрузка при смене адреса сервера
+    val apiVersion = ApiClient.version
+    var lastVersion by remember { mutableIntStateOf(apiVersion) }
+    LaunchedEffect(apiVersion) {
+        if (apiVersion != lastVersion) {
+            lastVersion = apiVersion
+            viewModel.reload()
+        }
+    }
+
+    // Тосты с результатом операций
+    val message = viewModel.message
+    LaunchedEffect(message) {
+        if (message != null) {
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            viewModel.messageShown()
+        }
+    }
+
+    // Автовыбор первого типа, когда ничего не выбрано
+    val state = viewModel.state
+    LaunchedEffect(state) {
+        if (state is TypesState.Success &&
+            viewModel.expandedTypeId == null &&
+            state.types.isNotEmpty()
+        ) {
+            viewModel.toggleType(state.types.first().id)
+        }
+    }
+
+    // Диалоги
+    val types = (state as? TypesState.Success)?.types.orEmpty()
+    viewModel.draft?.let { d ->
+        RecipeEditDialog(
+            draft = d,
+            types = types,
+            busy = viewModel.busy,
+            onDismiss = { viewModel.dismissDraft() },
+            onSave = { viewModel.save(it) }
+        )
+    }
+    viewModel.deleting?.let { r ->
+        DeleteDialog(
+            recipe = r,
+            busy = viewModel.busy,
+            onConfirm = { viewModel.confirmDelete() },
+            onDismiss = { viewModel.cancelDelete() }
+        )
+    }
+    if (viewModel.addingType) {
+        AddTypeDialog(
+            busy = viewModel.busy,
+            onDismiss = { viewModel.dismissAddType() },
+            onSave = { viewModel.saveType(it) }
+        )
+    }
+    viewModel.renamingType?.let { t ->
+        AddTypeDialog(
+            busy = viewModel.busy,
+            title = "Переименовать тип",
+            initialName = t.name,
+            onDismiss = { viewModel.dismissRenameType() },
+            onSave = { viewModel.renameType(it) }
+        )
+    }
+    viewModel.deletingType?.let { t ->
+        DeleteTypeDialog(
+            type = t,
+            recipeCount = viewModel.deletingTypeRecipeCount,
+            busy = viewModel.busy,
+            onConfirm = { viewModel.confirmDeleteType() },
+            onDismiss = { viewModel.cancelDeleteType() }
+        )
+    }
+
+    when (state) {
+        is TypesState.Loading -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+
+        is TypesState.Error -> {
+            Column(
+                Modifier.fillMaxSize().padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "Ошибка загрузки",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    state.message,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+                Button(onClick = { viewModel.load() }) { Text("Повторить") }
+            }
+        }
+
+        is TypesState.Success -> {
+            val selectedId = viewModel.expandedTypeId
+            val recipesState = selectedId?.let { viewModel.recipes[it] ?: RecipesState.Loading }
+            PullToRefreshBox(
+                isRefreshing = viewModel.isRefreshing,
+                onRefresh = { viewModel.refresh() },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Заголовок с кнопками
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "Главная",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Row {
+                                var menuOpen by remember { mutableStateOf(false) }
+                                Box {
+                                    IconButton(onClick = { menuOpen = true }) {
+                                        Icon(
+                                            Icons.Filled.Add,
+                                            contentDescription = "Добавить",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = menuOpen,
+                                        onDismissRequest = { menuOpen = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Новый рецепт") },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Filled.Restaurant,
+                                                    contentDescription = null
+                                                )
+                                            },
+                                            onClick = {
+                                                menuOpen = false
+                                                viewModel.startCreate()
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Новый тип") },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Filled.Category,
+                                                    contentDescription = null
+                                                )
+                                            },
+                                            onClick = {
+                                                menuOpen = false
+                                                viewModel.startAddType()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Чипсы типов
+                    item {
+                        if (state.types.isEmpty()) {
+                            Text(
+                                "Типов пока нет. Добавьте через «+».",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(0.dp)
+                            ) {
+                                state.types.forEach { type ->
+                                    TypeChip(
+                                        type = type,
+                                        selected = type.id == selectedId,
+                                        onSelect = { viewModel.toggleType(type.id) },
+                                        onRename = { viewModel.startRenameType(type) },
+                                        onDelete = { viewModel.askDeleteType(type) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Блюда выбранного типа
+                    when (recipesState) {
+                        null -> Unit
+
+                        is RecipesState.Loading -> item {
+                            Box(
+                                Modifier.fillMaxWidth().padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) { CircularProgressIndicator() }
+                        }
+
+                        is RecipesState.Error -> item {
+                            Column {
+                                Text(
+                                    recipesState.message,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                TextButton(onClick = { viewModel.loadRecipes(selectedId!!) }) {
+                                    Text("Повторить")
+                                }
+                            }
+                        }
+
+                        is RecipesState.Success -> {
+                            if (recipesState.recipes.isEmpty()) {
+                                item {
+                                    Text(
+                                        "Пока нет блюд",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(8.dp)
+                                    )
+                                }
+                            }
+                            items(recipesState.recipes, key = { it.id }) { recipe ->
+                                RecipeItem(
+                                    recipe = recipe,
+                                    onClick = { onRecipeClick(recipe.id) },
+                                    onEdit = { viewModel.startEdit(selectedId!!, recipe) },
+                                    onDelete = { viewModel.askDelete(recipe) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecipeItem(
+    recipe: Recipe,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 6.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = recipe.name,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onEdit) {
+                Icon(
+                    Icons.Filled.Edit,
+                    contentDescription = "Изменить",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = "Удалить",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+fun typeTitle(key: String): String = key.replaceFirstChar { it.uppercase() }
+
+@Composable
+private fun TypeChip(
+    type: Type,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var longPressed by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val longPressTimeout = LocalViewConfiguration.current.longPressTimeoutMillis
+
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collectLatest { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> {
+                    delay(longPressTimeout)
+                    longPressed = true
+                    menuOpen = true
+                }
+                is PressInteraction.Cancel -> longPressed = false
+                else -> Unit
+            }
+        }
+    }
+
+    Box {
+        FilterChip(
+            selected = selected,
+            onClick = {
+                if (longPressed) longPressed = false
+                else if (!selected) onSelect()
+            },
+            label = {
+                Text(typeTitle(type.name), style = MaterialTheme.typography.titleSmall)
+            },
+            shape = RoundedCornerShape(12.dp),
+            interactionSource = interactionSource
+        )
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text("Переименовать") },
+                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                onClick = { menuOpen = false; onRename() }
+            )
+            DropdownMenuItem(
+                text = { Text("Удалить", color = MaterialTheme.colorScheme.error) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
+                onClick = { menuOpen = false; onDelete() }
+            )
+        }
+    }
+}

@@ -1,0 +1,5 @@
+<resources>
+    <style name="Base.Theme.Test" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.Test" parent="Base.Theme.Test" />
+</resources>
