@@ -7,7 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.recipes.data.ApiClient
-import com.example.recipes.data.ItemRequest
+import com.example.recipes.data.DaytimeType
 import com.example.recipes.data.Recipe
 import com.example.recipes.data.Type
 import com.example.recipes.data.TypeRequest
@@ -26,18 +26,7 @@ sealed interface RecipesState {
     data class Error(val message: String) : RecipesState
 }
 
-data class RecipeDraft(
-    val id: Int?,
-    val typeId: Int,
-    val name: String,
-    val text: String,
-//    val image: String
-)
-
 class HomeViewModel : ViewModel() {
-
-    var draft by mutableStateOf<RecipeDraft?>(null)
-        private set
     var deleting by mutableStateOf<Recipe?>(null)
         private set
     var busy by mutableStateOf(false)
@@ -58,6 +47,12 @@ class HomeViewModel : ViewModel() {
     var deletingTypeRecipeCount by mutableStateOf<Int?>(null)
         private set
 
+    var daytimeTypes by mutableStateOf<List<DaytimeType>>(emptyList())
+        private set
+
+    var daytimeFilter by mutableStateOf<Int?>(null)
+        private set
+
     var message by mutableStateOf<String?>(null)
 
     fun messageShown() { message = null }
@@ -67,15 +62,27 @@ class HomeViewModel : ViewModel() {
     fun dismissRenameType() { renamingType = null }
     fun askDeleteType(t: Type) {
         deletingType = t
+        deletingTypeRecipeCount = null
         deletingTypeRecipeCount = (recipes[t.id] as? RecipesState.Success)?.recipes?.size
         viewModelScope.launch {
             val count = try {
-                ApiClient.api.getRecipes(t.id).size
+                ApiClient.api.getRecipes(t.id, daytimeTypes.firstOrNull()?.id).size
             } catch (e: Exception) {
                 -1
             }
             if (deletingType?.id == t.id) deletingTypeRecipeCount = count
         }
+    }
+
+    fun createArgs(): Pair<Int, Int>? {
+        val types = (state as? TypesState.Success)?.types ?: return null
+        val t = expandedTypeId ?: types.firstOrNull()?.id
+        val d = daytimeFilter ?: daytimeTypes.firstOrNull()?.id
+        if (t == null || d == null) {
+            message = "Сначала добавьте тип"
+            return null
+        }
+        return t to d
     }
 
     fun cancelDeleteType() {
@@ -87,44 +94,21 @@ class HomeViewModel : ViewModel() {
         state = TypesState.Success(ApiClient.api.getTypes())
     }
 
-    fun startCreate() {
-        val types = (state as? TypesState.Success)?.types ?: return
-        val typeId = expandedTypeId ?: types.firstOrNull()?.id ?: return
-        draft = RecipeDraft(null, typeId, "", "")
-    }
-
-    fun startEdit(typeId: Int, recipe: Recipe) {
+    private fun loadDaytimeTypes() {
         viewModelScope.launch {
-            busy = true
             try {
-                val d = ApiClient.api.getRecipe(recipe.id)   // нужен полный текст
-                draft = RecipeDraft(d.id, typeId, d.name, d.recipeText)
+                daytimeTypes = ApiClient.api.getDaytimeTypes()
             } catch (e: Exception) {
                 message = e.toUserMessage()
             }
-            busy = false
         }
     }
 
-    fun dismissDraft() { draft = null }
-
-    fun save(d: RecipeDraft) {
-        val body = ItemRequest(d.typeId, d.name.trim(), d.text.trim())
-        viewModelScope.launch {
-            busy = true
-            try {
-                if (d.id == null) ApiClient.api.createRecipe(body)
-                else ApiClient.api.updateRecipe(d.id, body)
-                draft = null
-                recipes.clear()
-                expandedTypeId = d.typeId
-                loadRecipes(d.typeId)
-                message = if (d.id == null) "Рецепт добавлен" else "Изменения сохранены"
-            } catch (e: Exception) {
-                message = e.toUserMessage()
-            }
-            busy = false
-        }
+    fun selectDaytime(id: Int?) {
+        if (daytimeFilter == id) return
+        daytimeFilter = id
+        recipes.clear()
+        expandedTypeId?.let { loadRecipes(it) }
     }
 
     fun saveType(name: String) {
@@ -181,11 +165,18 @@ class HomeViewModel : ViewModel() {
         state = TypesState.Loading
         viewModelScope.launch {
             state = try {
+                val dts = ApiClient.api.getDaytimeTypes()
+                daytimeTypes = dts
+                if (dts.none { it.id == daytimeFilter }) {
+                    daytimeFilter = dts.firstOrNull { it.name.equals("Общее", ignoreCase = true) }?.id
+                        ?: dts.firstOrNull()?.id
+                }
                 TypesState.Success(ApiClient.api.getTypes())
             } catch (e: Exception) {
                 TypesState.Error(e.toUserMessage())
             }
-        }   }
+        }
+    }
 
     fun toggleType(typeId: Int) {
         if (expandedTypeId == typeId) {
@@ -202,7 +193,7 @@ class HomeViewModel : ViewModel() {
         recipes[typeId] = RecipesState.Loading
         viewModelScope.launch {
             recipes[typeId] = try {
-                RecipesState.Success(ApiClient.api.getRecipes(typeId))
+                RecipesState.Success(ApiClient.api.getRecipes(typeId, daytimeFilter))
             } catch (e: Exception) {
                 RecipesState.Error(e.toUserMessage())
             }
@@ -211,6 +202,7 @@ class HomeViewModel : ViewModel() {
 
     fun reload() {
         expandedTypeId = null
+        daytimeFilter = null
         recipes.clear()
         load()
     }
@@ -223,7 +215,7 @@ class HomeViewModel : ViewModel() {
                 val types = ApiClient.api.getTypes()
                 val selected = expandedTypeId?.takeIf { id -> types.any { it.id == id } }
                     ?: types.firstOrNull()?.id
-                val list = selected?.let { ApiClient.api.getRecipes(it) }
+                val list = selected?.let { ApiClient.api.getRecipes(it, daytimeFilter) }
 
                 state = TypesState.Success(types)
                 recipes.clear()

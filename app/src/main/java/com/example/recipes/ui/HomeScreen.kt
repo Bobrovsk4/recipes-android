@@ -1,6 +1,7 @@
 package com.example.recipes.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.platform.LocalViewConfiguration
 import com.example.recipes.data.Type
 import kotlinx.coroutines.delay
@@ -60,6 +62,10 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 fun HomeScreen(
     onRecipeClick: (Int) -> Unit,
+    onCreate: (typeId: Int, daytimeId: Int) -> Unit,
+    onEdit: (id: Int, typeId: Int, daytimeId: Int) -> Unit,
+    refreshSignal: Boolean,
+    onRefreshHandled: () -> Unit,
     viewModel: HomeViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -94,17 +100,14 @@ fun HomeScreen(
         }
     }
 
-    // Диалоги
-    val types = (state as? TypesState.Success)?.types.orEmpty()
-    viewModel.draft?.let { d ->
-        RecipeEditDialog(
-            draft = d,
-            types = types,
-            busy = viewModel.busy,
-            onDismiss = { viewModel.dismissDraft() },
-            onSave = { viewModel.save(it) }
-        )
+    LaunchedEffect(refreshSignal) {
+        if (refreshSignal) {
+            viewModel.refresh()
+            onRefreshHandled()
+        }
     }
+
+    // Диалоги
     viewModel.deleting?.let { r ->
         DeleteDialog(
             recipe = r,
@@ -215,7 +218,7 @@ fun HomeScreen(
                                             },
                                             onClick = {
                                                 menuOpen = false
-                                                viewModel.startCreate()
+                                                viewModel.createArgs()?.let { (t, d) -> onCreate(t, d) }
                                             }
                                         )
                                         DropdownMenuItem(
@@ -233,6 +236,20 @@ fun HomeScreen(
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
+                    item {
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            viewModel.daytimeTypes.forEach { d ->
+                                FilterChip(
+                                    selected = viewModel.daytimeFilter == d.id,
+                                    onClick = { viewModel.selectDaytime(d.id) },
+                                    label = { Text(d.name.replaceFirstChar { it.uppercase() }) }
+                                )
                             }
                         }
                     }
@@ -299,7 +316,7 @@ fun HomeScreen(
                                 RecipeItem(
                                     recipe = recipe,
                                     onClick = { onRecipeClick(recipe.id) },
-                                    onEdit = { viewModel.startEdit(selectedId!!, recipe) },
+                                    onEdit = { onEdit(recipe.id, selectedId!!, viewModel.daytimeFilter ?: -1) },
                                     onDelete = { viewModel.askDelete(recipe) }
                                 )
                             }

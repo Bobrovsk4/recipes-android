@@ -10,10 +10,19 @@ fun Throwable.toUserMessage(): String = when (this) {
     is SocketTimeoutException -> "Сервер не отвечает.\nПроверь адрес или выключи выпын."
     is ConnectException, is UnknownHostException ->
         "Не удалось подключиться к серверу.\nПроверь адрес или выключи выпын."
-    is HttpException -> when (code()) {
-        404 -> "Не найдено на сервере (404)."
-        in 500..599 -> "Ошибка на сервере (${code()})."
-        else -> "Ошибка запроса (${code()})."
+    is HttpException -> {
+        val serverMsg = try {
+            com.google.gson.JsonParser.parseString(response()?.errorBody()?.string())
+                .asJsonObject.get("error").asString
+        } catch (e: Exception) {
+            null
+        }
+        when (code()) {
+            404 -> "Не найдено на сервере (404)."
+            409 -> serverMsg ?: "Конфликт: такое название уже есть или тип используется."
+            in 500..599 -> "Ошибка на сервере (${code()})."
+            else -> serverMsg ?: "Ошибка запроса (${code()})."
+        }
     }
     is JsonParseException -> "Сервер вернул данные в неожиданном формате."
     else -> message ?: "Неизвестная ошибка."

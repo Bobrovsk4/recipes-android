@@ -12,6 +12,11 @@ data class TypeRequest(
     val name: String
 )
 
+data class DaytimeType(
+    val id: Int,
+    val name: String
+)
+
 // превью рецепта
 data class Recipe(
     val id: Int,
@@ -24,13 +29,16 @@ data class Recipe(
 data class RecipeDetails(
     val id: Int,
     val name: String,
-    val type: String, // TODO: убрать отсюда и с сервака
+    val type: String? = null, // TODO: убрать отсюда и с сервака
+    val ingredients: List<String>? = null,
     @SerializedName("recipe_text") val recipeText: String,
-//    val image: String?
+    @SerializedName("daytime_type") val daytimeTypeId: Int? = null
 )
 
 data class ItemRequest(
     @SerializedName("type") val typeId: Int,
+    @SerializedName("daytime_type") val daytimeTypeId: Int,
     val name: String,
+    val ingredients: List<String>,
     @SerializedName("recipe_text") val recipeText: String
 )

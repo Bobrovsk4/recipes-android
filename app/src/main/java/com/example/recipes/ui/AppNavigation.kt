@@ -29,6 +29,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.runtime.collectAsState
 
 private enum class Tab(
     val route: String,
@@ -41,6 +42,7 @@ private enum class Tab(
 }
 
 private const val RECIPE_ROUTE = "recipe/{id}"
+private const val EDIT_ROUTE = "edit?id={id}&typeId={typeId}&daytimeId={daytimeId}"
 
 @Composable
 fun AppNavigation() {
@@ -105,8 +107,39 @@ fun AppNavigation() {
             popEnterTransition = { fadeIn() },
             popExitTransition = { fadeOut() }
         ) {
-            composable(Tab.Home.route) {
-                HomeScreen(onRecipeClick = { id -> navController.navigate("recipe/$id") })
+            composable(Tab.Home.route) { entry ->
+                val refresh by entry.savedStateHandle
+                    .getStateFlow("refresh", false).collectAsState()
+                HomeScreen(
+                    onRecipeClick = { id -> navController.navigate("recipe/$id") },
+                    onCreate = { t, d -> navController.navigate("edit?id=-1&typeId=$t&daytimeId=$d") },
+                    onEdit = { id, t, d -> navController.navigate("edit?id=$id&typeId=$t&daytimeId=$d") },
+                    refreshSignal = refresh,
+                    onRefreshHandled = { entry.savedStateHandle["refresh"] = false }
+                )
+            }
+
+            composable(
+                route = EDIT_ROUTE,
+                arguments = listOf(
+                    navArgument("id") { type = NavType.IntType; defaultValue = -1 },
+                    navArgument("typeId") { type = NavType.IntType; defaultValue = -1 },
+                    navArgument("daytimeId") { type = NavType.IntType; defaultValue = -1 }
+                ),
+                enterTransition = { slideInHorizontally(initialOffsetX = { it / 4 }) + fadeIn() },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it / 4 }) + fadeOut() }
+            ) { entry ->
+                val args = entry.arguments
+                RecipeEditScreen(
+                    recipeId = args?.getInt("id") ?: -1,
+                    typeId = args?.getInt("typeId") ?: -1,
+                    daytimeId = args?.getInt("daytimeId") ?: -1,
+                    onBack = { navController.popBackStack() },
+                    onSaved = {
+                        navController.previousBackStackEntry?.savedStateHandle?.set("refresh", true)
+                        navController.popBackStack()
+                    }
+                )
             }
             composable(Tab.Settings.route) {
                 SettingsScreen()

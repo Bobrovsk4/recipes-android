@@ -107,6 +107,30 @@ fun RecipeScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
 
+                    val ingredients = recipe.ingredients.orEmpty().filter { it.isNotBlank() }
+                    if (ingredients.isNotEmpty()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ) {
+                            Column(
+                                Modifier.padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    "Ингредиенты",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                ingredients.forEach {
+                                    Text("•  $it", style = MaterialTheme.typography.bodyLarge)
+                                }
+                            }
+                        }
+                    }
+
                     // Текст рецепта на карточке
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
