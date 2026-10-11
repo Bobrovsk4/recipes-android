@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,7 +20,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -336,51 +346,88 @@ fun HomeScreen(
 private fun RecipeItem(
     recipe: Recipe,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
-    val shape = RoundedCornerShape(20.dp)
+    val scheme = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(28.dp)
 
-    Box {
-        Card(
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "press")
+
+    Box(modifier.scale(scale)) {
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(shape)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            scheme.primaryContainer.copy(alpha = 0.55f),
+                            scheme.surfaceContainerLow
+                        )
+                    )
+                )
+                .border(1.dp, scheme.outlineVariant.copy(alpha = 0.6f), shape)
                 .combinedClickable(
+                    interactionSource = interaction,
+                    indication = LocalIndication.current,
                     onClick = onClick,
                     onLongClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         menuOpen = true
                     }
-                ),
-            shape = shape,
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            )
+                )
         ) {
-            Text(
-                text = recipe.name,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp)
-            )
+            Row(
+                modifier = Modifier.padding(start = 20.dp, end = 14.dp, top = 16.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Акцентная чёрточка
+                Box(
+                    Modifier
+                        .width(4.dp)
+                        .height(28.dp)
+                        .clip(CircleShape)
+                        .background(scheme.primary)
+                )
+                Text(
+                    text = recipe.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = scheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
+                )
+                // Круглая кнопка-стрелка
+                Box(
+                    modifier = Modifier.size(36.dp).clip(CircleShape).background(scheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = scheme.onPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
         }
 
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
                 text = {
-                    Text(
-                        "Удалить",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                    Text("Удалить", style = MaterialTheme.typography.bodyMedium, color = scheme.error)
                 },
                 leadingIcon = {
                     Icon(
                         Icons.Filled.Delete,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
+                        tint = scheme.error,
                         modifier = Modifier.size(18.dp)
                     )
                 },
