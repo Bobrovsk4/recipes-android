@@ -12,6 +12,8 @@ import com.example.recipes.data.DaytimeType
 import com.example.recipes.data.ItemRequest
 import com.example.recipes.data.Type
 import com.example.recipes.data.toUserMessage
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 class RecipeEditViewModel : ViewModel() {
@@ -49,27 +51,45 @@ class RecipeEditViewModel : ViewModel() {
     }
 
     fun load(recipeId: Int, initType: Int, initDaytime: Int) {
+        if (ApiClient.cachedTypes.isNotEmpty() && ApiClient.cachedDaytimes.isNotEmpty()) {
+            types = ApiClient.cachedTypes
+            daytimeTypes = ApiClient.cachedDaytimes
+            if (recipeId < 0) {
+                typeId = initType.takeIf { t -> types.any { it.id == t } } ?: types.first().id
+                daytimeId = initDaytime.takeIf { t -> daytimeTypes.any { it.id == t } } ?: daytimeTypes.first().id
+                if (ingredients.isEmpty()) ingredients.add("")
+                loading = false
+            }
+        }
+
         viewModelScope.launch {
             loading = true
             loadError = null
             try {
-                types = ApiClient.api.getTypes()
-                daytimeTypes = ApiClient.api.getDaytimeTypes()
+                coroutineScope {
+                    val typesJob = async { ApiClient.api.getTypes() }
+                    val daytimesJob = async { ApiClient.api.getDaytimeTypes() }
+                    val recipeJob = if (recipeId >= 0) async { ApiClient.api.getRecipe(recipeId) } else null
 
-                var dt = initDaytime
-                if (recipeId >= 0) {
-                    val d = ApiClient.api.getRecipe(recipeId)
-                    name = d.name
-                    text = d.recipeText
-                    ingredients.clear()
-                    ingredients.addAll(d.ingredients.orEmpty())
-                    dt = d.daytimeTypeId ?: initDaytime
+                    types = typesJob.await()
+                    daytimeTypes = daytimesJob.await()
+
+                    var tp = initType
+                    var dt = initDaytime
+                    recipeJob?.await()?.let { d ->
+                        name = d.name
+                        text = d.recipeText
+                        ingredients.clear()
+                        ingredients.addAll(d.ingredients.orEmpty())
+                        tp = d.typeId ?: initType
+                        dt = d.daytimeTypeId ?: initDaytime
+                    }
+                    typeId = tp.takeIf { t -> types.any { it.id == t } }
+                        ?: types.firstOrNull()?.id ?: -1
+                    daytimeId = dt.takeIf { t -> daytimeTypes.any { it.id == t } }
+                        ?: daytimeTypes.firstOrNull()?.id ?: -1
+                    if (ingredients.isEmpty()) ingredients.add("")
                 }
-                typeId = initType.takeIf { t -> types.any { it.id == t } }
-                    ?: types.firstOrNull()?.id ?: -1
-                daytimeId = dt.takeIf { t -> daytimeTypes.any { it.id == t } }
-                    ?: daytimeTypes.firstOrNull()?.id ?: -1
-                if (ingredients.isEmpty()) ingredients.add("")
             } catch (e: Exception) {
                 loadError = e.toUserMessage()
             }

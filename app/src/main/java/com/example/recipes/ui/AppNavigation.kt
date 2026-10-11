@@ -113,7 +113,6 @@ fun AppNavigation() {
                 HomeScreen(
                     onRecipeClick = { id -> navController.navigate("recipe/$id") },
                     onCreate = { t, d -> navController.navigate("edit?id=-1&typeId=$t&daytimeId=$d") },
-                    onEdit = { id, t, d -> navController.navigate("edit?id=$id&typeId=$t&daytimeId=$d") },
                     refreshSignal = refresh,
                     onRefreshHandled = { entry.savedStateHandle["refresh"] = false }
                 )
@@ -137,6 +136,9 @@ fun AppNavigation() {
                     onBack = { navController.popBackStack() },
                     onSaved = {
                         navController.previousBackStackEntry?.savedStateHandle?.set("refresh", true)
+                        runCatching {
+                            navController.getBackStackEntry(Tab.Home.route).savedStateHandle["refresh"] = true
+                        }
                         navController.popBackStack()
                     }
                 )
@@ -155,7 +157,15 @@ fun AppNavigation() {
                 }
             ) { entry ->
                 val id = entry.arguments?.getInt("id") ?: 0
-                RecipeScreen(recipeId = id, onBack = { navController.popBackStack() })
+                val refresh by entry.savedStateHandle
+                    .getStateFlow("refresh", false).collectAsState()
+                RecipeScreen(
+                    recipeId = id,
+                    onBack = { navController.popBackStack() },
+                    onEdit = { t, d -> navController.navigate("edit?id=$id&typeId=$t&daytimeId=$d") },
+                    refreshSignal = refresh,
+                    onRefreshHandled = { entry.savedStateHandle["refresh"] = false }
+                )
             }
         }
     }

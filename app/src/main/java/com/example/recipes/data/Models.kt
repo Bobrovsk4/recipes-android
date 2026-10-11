@@ -32,6 +32,7 @@ data class RecipeDetails(
     val type: String? = null, // TODO: убрать отсюда и с сервака
     val ingredients: List<String>? = null,
     @SerializedName("recipe_text") val recipeText: String,
+    @SerializedName("type_id") val typeId: Int? = null,
     @SerializedName("daytime_type") val daytimeTypeId: Int? = null
 )
 

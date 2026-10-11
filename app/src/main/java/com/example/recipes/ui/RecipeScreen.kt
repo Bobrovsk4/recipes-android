@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,9 +36,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 fun RecipeScreen(
     recipeId: Int,
     onBack: () -> Unit,
+    onEdit: (typeId: Int, daytimeId: Int) -> Unit,
+    refreshSignal: Boolean,
+    onRefreshHandled: () -> Unit,
     viewModel: RecipeViewModel = viewModel()
 ) {
     LaunchedEffect(recipeId) { viewModel.loadIfNeeded(recipeId) }
+    LaunchedEffect(refreshSignal) {
+        if (refreshSignal) {
+            viewModel.load(recipeId)
+            onRefreshHandled()
+        }
+    }
 
     val state = viewModel.state
 
@@ -51,9 +61,18 @@ fun RecipeScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
                     }
                 },
+                actions = {
+                    val loaded = (state as? RecipeState.Success)?.recipe
+                    if (loaded != null) {
+                        IconButton(onClick = { onEdit(loaded.typeId ?: -1, loaded.daytimeTypeId ?: -1) }) {
+                            Icon(Icons.Filled.Edit, contentDescription = "Изменить")
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
+                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+                    actionIconContentColor = MaterialTheme.colorScheme.primary
                 )
             )
         }

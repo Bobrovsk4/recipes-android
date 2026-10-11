@@ -11,6 +11,9 @@ object ApiClient {
     var version: Int = 0
         private set
 
+    @Volatile var cachedTypes: List<Type> = emptyList()
+    @Volatile var cachedDaytimes: List<DaytimeType> = emptyList()
+
     var baseUrl: String = "http://2.58.12.122:8080/"
         set(value) {
             val fixed = if (value.endsWith("/")) value else "$value/"

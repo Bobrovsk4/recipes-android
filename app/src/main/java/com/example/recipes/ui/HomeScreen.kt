@@ -1,6 +1,8 @@
 package com.example.recipes.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,7 +22,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -52,18 +53,27 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalViewConfiguration
 import com.example.recipes.data.Type
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.Dp
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onRecipeClick: (Int) -> Unit,
     onCreate: (typeId: Int, daytimeId: Int) -> Unit,
-    onEdit: (id: Int, typeId: Int, daytimeId: Int) -> Unit,
     refreshSignal: Boolean,
     onRefreshHandled: () -> Unit,
     viewModel: HomeViewModel = viewModel()
@@ -240,40 +250,34 @@ fun HomeScreen(
                         }
                     }
                     item {
-                        Row(
-                            Modifier.horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            viewModel.daytimeTypes.forEach { d ->
-                                FilterChip(
-                                    selected = viewModel.daytimeFilter == d.id,
-                                    onClick = { viewModel.selectDaytime(d.id) },
-                                    label = { Text(d.name.replaceFirstChar { it.uppercase() }) }
-                                )
-                            }
-                        }
-                    }
-
-                    // Чипсы типов
-                    item {
-                        if (state.types.isEmpty()) {
-                            Text(
-                                "Типов пока нет. Добавьте через «+».",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(0.dp)
-                            ) {
-                                state.types.forEach { type ->
-                                    TypeChip(
-                                        type = type,
-                                        selected = type.id == selectedId,
-                                        onSelect = { viewModel.toggleType(type.id) },
-                                        onRename = { viewModel.startRenameType(type) },
-                                        onDelete = { viewModel.askDeleteType(type) }
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            ScrollableChipRow {
+                                viewModel.daytimeTypes.forEach { d ->
+                                    FilterChip(
+                                        selected = viewModel.daytimeFilter == d.id,
+                                        onClick = { viewModel.selectDaytime(d.id) },
+                                        label = { Text(d.name.replaceFirstChar { it.uppercase() }) },
+                                        shape = RoundedCornerShape(12.dp)
                                     )
+                                }
+                            }
+                            // Чипсы типов
+                            if (state.types.isEmpty()) {
+                                Text(
+                                    "Типов пока нет. Добавьте через «+».",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                ScrollableChipRow {
+                                    state.types.forEach { type ->
+                                        TypeChip(
+                                            type = type,
+                                            selected = type.id == selectedId,
+                                            onSelect = { viewModel.toggleType(type.id) },
+                                            onRename = { viewModel.startRenameType(type) },
+                                            onDelete = { viewModel.askDeleteType(type) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -316,7 +320,6 @@ fun HomeScreen(
                                 RecipeItem(
                                     recipe = recipe,
                                     onClick = { onRecipeClick(recipe.id) },
-                                    onEdit = { onEdit(recipe.id, selectedId!!, viewModel.daytimeFilter ?: -1) },
                                     onDelete = { viewModel.askDelete(recipe) }
                                 )
                             }
@@ -328,45 +331,63 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RecipeItem(
     recipe: Recipe,
     onClick: () -> Unit,
-    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            contentColor = MaterialTheme.colorScheme.onSurface
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 6.dp, end = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+    var menuOpen by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+    val shape = RoundedCornerShape(20.dp)
+
+    Box {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        menuOpen = true
+                    }
+                ),
+            shape = shape,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            )
         ) {
             Text(
                 text = recipe.name,
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp)
             )
-            IconButton(onClick = onEdit) {
-                Icon(
-                    Icons.Filled.Edit,
-                    contentDescription = "Изменить",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = "Удалить",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
+        }
+
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        "Удалить",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = { menuOpen = false; onDelete() },
+                modifier = Modifier.height(36.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+            )
         }
     }
 }
@@ -416,20 +437,38 @@ private fun TypeChip(
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
                 text = { Text("Переименовать") },
-                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
-                onClick = { menuOpen = false; onRename() }
+                onClick = { menuOpen = false; onRename() },
             )
             DropdownMenuItem(
                 text = { Text("Удалить", color = MaterialTheme.colorScheme.error) },
-                leadingIcon = {
-                    Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                },
                 onClick = { menuOpen = false; onDelete() }
             )
         }
+    }
+}
+
+@Composable
+private fun ScrollableChipRow(
+    sidePadding: Dp = 16.dp,
+    content: @Composable RowScope.() -> Unit
+) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+        Row(
+            modifier = Modifier
+                .layout { measurable, constraints ->
+                    val extra = sidePadding.roundToPx() * 2
+                    val placeable = measurable.measure(
+                        constraints.copy(maxWidth = constraints.maxWidth + extra)
+                    )
+                    layout(constraints.maxWidth, placeable.height) {
+                        placeable.place(-extra / 2, 0)
+                    }
+                }
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = sidePadding),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
+        )
     }
 }
