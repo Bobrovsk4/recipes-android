@@ -30,6 +30,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.compose.runtime.collectAsState
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.outlined.Casino
 
 private enum class Tab(
     val route: String,
@@ -38,6 +40,7 @@ private enum class Tab(
     val iconSelected: ImageVector
 ) {
     Home("home", "Главная", Icons.Outlined.Home, Icons.Filled.Home),
+    Random("random", "Случайный", Icons.Outlined.Casino, Icons.Filled.Casino),
     Settings("settings", "Настройки", Icons.Outlined.Settings, Icons.Filled.Settings)
 }
 
@@ -50,7 +53,6 @@ fun AppNavigation() {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
 
-    // Нижняя панель видна только на экранах вкладок, на экране рецепта скрыта
     val showBottomBar = Tab.entries.any { tab ->
         destination?.hierarchy?.any { it.route == tab.route } == true
     }
@@ -117,7 +119,9 @@ fun AppNavigation() {
                     onRefreshHandled = { entry.savedStateHandle["refresh"] = false }
                 )
             }
-
+            composable(Tab.Random.route) {
+                RandomScreen(onRecipeClick = { id -> navController.navigate("recipe/$id") })
+            }
             composable(
                 route = EDIT_ROUTE,
                 arguments = listOf(

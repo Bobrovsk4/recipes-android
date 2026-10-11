@@ -34,8 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -78,6 +76,11 @@ import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -263,11 +266,11 @@ fun HomeScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             ScrollableChipRow {
                                 viewModel.daytimeTypes.forEach { d ->
-                                    FilterChip(
+                                    AppChip(
+                                        label = d.name.replaceFirstChar { it.uppercase() },
                                         selected = viewModel.daytimeFilter == d.id,
                                         onClick = { viewModel.selectDaytime(d.id) },
-                                        label = { Text(d.name.replaceFirstChar { it.uppercase() }) },
-                                        shape = RoundedCornerShape(12.dp)
+                                        secondary = true
                                     )
                                 }
                             }
@@ -343,10 +346,10 @@ fun HomeScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun RecipeItem(
+fun RecipeItem(
     recipe: Recipe,
     onClick: () -> Unit,
-    onDelete: () -> Unit,
+    onDelete: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -376,10 +379,12 @@ private fun RecipeItem(
                     interactionSource = interaction,
                     indication = LocalIndication.current,
                     onClick = onClick,
-                    onLongClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        menuOpen = true
-                    }
+                    onLongClick = if (onDelete != null) {
+                        {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuOpen = true
+                        }
+                    } else null
                 )
         ) {
             Row(
@@ -419,22 +424,28 @@ private fun RecipeItem(
         }
 
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(
-                text = {
-                    Text("Удалить", style = MaterialTheme.typography.bodyMedium, color = scheme.error)
-                },
-                leadingIcon = {
-                    Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = null,
-                        tint = scheme.error,
-                        modifier = Modifier.size(18.dp)
-                    )
-                },
-                onClick = { menuOpen = false; onDelete() },
-                modifier = Modifier.height(36.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
-            )
+            if (onDelete != null) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "Удалить",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = scheme.error
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = null,
+                            tint = scheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    onClick = { menuOpen = false; onDelete() },
+                    modifier = Modifier.height(36.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                )
+            }
         }
     }
 }
@@ -469,16 +480,13 @@ private fun TypeChip(
     }
 
     Box {
-        FilterChip(
+        AppChip(
+            label = typeTitle(type.name),
             selected = selected,
             onClick = {
                 if (longPressed) longPressed = false
                 else if (!selected) onSelect()
             },
-            label = {
-                Text(typeTitle(type.name), style = MaterialTheme.typography.titleSmall)
-            },
-            shape = RoundedCornerShape(12.dp),
             interactionSource = interactionSource
         )
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -518,4 +526,59 @@ private fun ScrollableChipRow(
             content = content
         )
     }
+}
+
+@Composable
+fun AppChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    secondary: Boolean = false,
+    interactionSource: MutableInteractionSource? = null
+) {
+    val scheme = MaterialTheme.colorScheme
+    val accent = if (secondary) scheme.secondary else scheme.primary
+    val onAccent = if (secondary) scheme.onSecondary else scheme.onPrimary
+
+    val container by animateColorAsState(
+        if (selected) accent else scheme.surfaceContainer, label = "chipBg"
+    )
+    val content by animateColorAsState(
+        if (selected) onAccent else scheme.onSurfaceVariant, label = "chipFg"
+    )
+
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        modifier = modifier.height(38.dp),
+        interactionSource = interactionSource,
+        shape = RoundedCornerShape(50),
+        leadingIcon = if (selected) {
+            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+        } else null,
+        label = {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+            )
+        },
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = container,
+            labelColor = content,
+            iconColor = content,
+            selectedContainerColor = container,
+            selectedLabelColor = content,
+            selectedLeadingIconColor = content
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = scheme.outlineVariant,
+            selectedBorderColor = Color.Transparent,
+            borderWidth = 1.dp,
+            selectedBorderWidth = 0.dp
+        )
+    )
 }
