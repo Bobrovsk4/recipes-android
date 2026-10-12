@@ -15,15 +15,18 @@ interface RecipeApi {
 
     @GET("api/items")
     suspend fun getRecipes(
-        @Query("type") typeId: Int,
-        @Query("daytime_type") daytimeType: Int?
+        @Query("type") typeId: Int? = null,
+        @Query("daytime_type") daytimeType: Int? = null
     ): List<Recipe>
 
     @GET("api/daytime_types")
     suspend fun getDaytimeTypes(): List<DaytimeType>
 
     @GET("api/items/random")
-    suspend fun getRandomRecipe(): RecipeDetails
+    suspend fun getRandomRecipe(
+        @Query("type_id") typeId: Int? = null,
+        @Query("daytime_type_id") daytimeTypeId: Int? = null
+    ): RecipeDetails
 
     @GET("api/items/{id}")
     suspend fun getRecipe(@Path("id") id: Int): RecipeDetails

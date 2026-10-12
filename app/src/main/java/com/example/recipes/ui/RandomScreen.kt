@@ -7,6 +7,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,6 +21,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,16 +38,51 @@ fun RandomScreen(
 ) {
     val scheme = MaterialTheme.colorScheme
     val recipe = viewModel.recipe
+    val hasFilter = viewModel.typeFilter != null || viewModel.daytimeFilter != null
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            "Случайный рецепт",
-            style = MaterialTheme.typography.headlineMedium,
-            color = scheme.onBackground
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "Случайный рецепт",
+                style = MaterialTheme.typography.headlineMedium,
+                color = scheme.onBackground
+            )
+            if (hasFilter) {
+                TextButton(onClick = { viewModel.clearFilters() }) { Text("Сбросить") }
+            }
+        }
+
+        if (viewModel.daytimeTypes.isNotEmpty()) {
+            ScrollableChipRow {
+                viewModel.daytimeTypes.forEach { d ->
+                    AppChip(
+                        label = d.name.replaceFirstChar { it.uppercase() },
+                        selected = viewModel.daytimeFilter == d.id,
+                        onClick = { viewModel.toggleDaytime(d.id) },
+                        secondary = true
+                    )
+                }
+            }
+        }
+
+        if (viewModel.types.isNotEmpty()) {
+            ScrollableChipRow {
+                viewModel.types.forEach { t ->
+                    AppChip(
+                        label = typeTitle(t.name),
+                        selected = viewModel.typeFilter == t.id,
+                        onClick = { viewModel.toggleType(t.id) }
+                    )
+                }
+            }
+        }
 
         Box(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -71,7 +108,7 @@ fun RandomScreen(
                         modifier = Modifier.size(56.dp)
                     )
                     Text(
-                        "Не знаете, что приготовить?\nНажмите RANDOM.",
+                        "Выберите тип или время приёма пищи\n(по желанию) и нажмите RANDOM.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = scheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
