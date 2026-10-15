@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.recipes.data.ApiClient
 import com.example.recipes.data.RecipeDetails
+import com.example.recipes.data.toUserMessage
 import kotlinx.coroutines.launch
 
 sealed interface RecipeState {
@@ -22,19 +23,20 @@ class RecipeViewModel : ViewModel() {
 
     private var loadedId: Int? = null
 
-    fun load(id: Int) {
+    fun load(id: Int, drink: Boolean = false) {
         loadedId = id
         state = RecipeState.Loading
         viewModelScope.launch {
             state = try {
-                RecipeState.Success(ApiClient.api.getRecipe(id))
+                val d = if (drink) ApiClient.api.getDrink(id) else ApiClient.api.getRecipe(id)
+                RecipeState.Success(d)
             } catch (e: Exception) {
-                RecipeState.Error(e.message ?: "Не удалось загрузить рецепт")
+                RecipeState.Error(e.toUserMessage())
             }
         }
     }
 
-    fun loadIfNeeded(id: Int) {
-        if (loadedId != id) load(id)
+    fun loadIfNeeded(id: Int, drink: Boolean = false) {
+        if (loadedId != id) load(id, drink)
     }
 }

@@ -9,11 +9,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.recipes.data.ApiClient
 import com.example.recipes.data.DaytimeType
+import com.example.recipes.data.DrinkRequest
 import com.example.recipes.data.ItemRequest
 import com.example.recipes.data.Type
 import com.example.recipes.data.toUserMessage
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 class RecipeEditViewModel : ViewModel() {
@@ -39,40 +41,37 @@ class RecipeEditViewModel : ViewModel() {
     val ingredients = mutableStateListOf<String>()
 
     private var started = false
+    private var drinkMode = false
 
     val isValid: Boolean
-        get() = name.isNotBlank() && text.isNotBlank() && typeId >= 0 && daytimeId >= 0
+        get() = name.isNotBlank() && text.isNotBlank() && typeId >= 0 &&
+                (drinkMode || daytimeId >= 0)
 
-    // recipeId = -1 значит создание нового рецепта
-    fun start(recipeId: Int, initType: Int, initDaytime: Int) {
+    fun start(recipeId: Int, initType: Int, initDaytime: Int, drink: Boolean) {
         if (started) return
         started = true
+        drinkMode = drink
         load(recipeId, initType, initDaytime)
     }
 
     fun load(recipeId: Int, initType: Int, initDaytime: Int) {
-        if (ApiClient.cachedTypes.isNotEmpty() && ApiClient.cachedDaytimes.isNotEmpty()) {
-            types = ApiClient.cachedTypes
-            daytimeTypes = ApiClient.cachedDaytimes
-            if (recipeId < 0) {
-                typeId = initType.takeIf { t -> types.any { it.id == t } } ?: types.first().id
-                daytimeId = initDaytime.takeIf { t -> daytimeTypes.any { it.id == t } } ?: daytimeTypes.first().id
-                if (ingredients.isEmpty()) ingredients.add("")
-                loading = false
-            }
-        }
-
         viewModelScope.launch {
             loading = true
             loadError = null
             try {
                 coroutineScope {
-                    val typesJob = async { ApiClient.api.getTypes() }
-                    val daytimesJob = async { ApiClient.api.getDaytimeTypes() }
-                    val recipeJob = if (recipeId >= 0) async { ApiClient.api.getRecipe(recipeId) } else null
+                    val typesJob = async {
+                        if (drinkMode) ApiClient.api.getDrinkTypes() else ApiClient.api.getTypes()
+                    }
+                    val daytimesJob =
+                        if (drinkMode) null else async { ApiClient.api.getDaytimeTypes() }
+                    val recipeJob = if (recipeId >= 0) async {
+                        if (drinkMode) ApiClient.api.getDrink(recipeId)
+                        else ApiClient.api.getRecipe(recipeId)
+                    } else null
 
                     types = typesJob.await()
-                    daytimeTypes = daytimesJob.await()
+                    daytimeTypes = daytimesJob?.await().orEmpty()
 
                     var tp = initType
                     var dt = initDaytime
@@ -86,10 +85,14 @@ class RecipeEditViewModel : ViewModel() {
                     }
                     typeId = tp.takeIf { t -> types.any { it.id == t } }
                         ?: types.firstOrNull()?.id ?: -1
-                    daytimeId = dt.takeIf { t -> daytimeTypes.any { it.id == t } }
-                        ?: daytimeTypes.firstOrNull()?.id ?: -1
+                    daytimeId = if (drinkMode) -1 else {
+                        dt.takeIf { t -> daytimeTypes.any { it.id == t } }
+                            ?: daytimeTypes.firstOrNull()?.id ?: -1
+                    }
                     if (ingredients.isEmpty()) ingredients.add("")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 loadError = e.toUserMessage()
             }
@@ -99,19 +102,28 @@ class RecipeEditViewModel : ViewModel() {
 
     fun save(recipeId: Int, onDone: () -> Unit) {
         if (!isValid || saving) return
-        val body = ItemRequest(
-            typeId = typeId,
-            daytimeTypeId = daytimeId,
-            name = name.trim(),
-            ingredients = ingredients.map { it.trim() }.filter { it.isNotEmpty() },
-            recipeText = text.trim()
-        )
+        val list = ingredients.map { it.trim() }.filter { it.isNotEmpty() }
         viewModelScope.launch {
             saving = true
             try {
-                if (recipeId < 0) ApiClient.api.createRecipe(body)
-                else ApiClient.api.updateRecipe(recipeId, body)
+                if (drinkMode) {
+                    val body = DrinkRequest(typeId, name.trim(), list, text.trim())
+                    if (recipeId < 0) ApiClient.api.createDrink(body)
+                    else ApiClient.api.updateDrink(recipeId, body)
+                } else {
+                    val body = ItemRequest(
+                        typeId = typeId,
+                        daytimeTypeId = daytimeId,
+                        name = name.trim(),
+                        ingredients = list,
+                        recipeText = text.trim()
+                    )
+                    if (recipeId < 0) ApiClient.api.createRecipe(body)
+                    else ApiClient.api.updateRecipe(recipeId, body)
+                }
                 onDone()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 message = e.toUserMessage()
             }

@@ -67,11 +67,12 @@ fun RecipeEditScreen(
     daytimeId: Int,
     onBack: () -> Unit,
     onSaved: () -> Unit,
+    drink: Boolean = false,
     viewModel: RecipeEditViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
-    LaunchedEffect(Unit) { viewModel.start(recipeId, typeId, daytimeId) }
+    LaunchedEffect(Unit) { viewModel.start(recipeId, typeId, daytimeId, drink) }
 
     val message = viewModel.message
     LaunchedEffect(message) {
@@ -90,8 +91,9 @@ fun RecipeEditScreen(
         topBar = {
             TopAppBar(
                 title = {
+                    val what = if (drink) "напиток" else "рецепт"
                     Text(
-                        if (recipeId < 0) "Новый рецепт" else "Изменение рецепта",
+                        if (recipeId < 0) "Новый $what" else "Изменение: $what",
                         style = MaterialTheme.typography.titleMedium
                     )
                 },
@@ -178,7 +180,7 @@ fun RecipeEditScreen(
                 // Название
                 NameCard(
                     value = viewModel.name,
-                    onChange = { viewModel.name = it }
+                    onChange = { viewModel.name = it },
                 )
 
                 // Тип и время приёма пищи

@@ -80,6 +80,10 @@ import com.example.recipes.data.Recipe
 import com.example.recipes.data.Type
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -487,7 +491,9 @@ fun AppChip(
             Text(
                 label,
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
         },
         colors = FilterChipDefaults.filterChipColors(
@@ -512,26 +518,71 @@ fun AppChip(
 @Composable
 fun ScrollableChipRow(
     sidePadding: Dp = 16.dp,
-    content: @Composable RowScope.() -> Unit
+    spacing: Dp = 8.dp,
+    content: @Composable () -> Unit
 ) {
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-        Row(
-            modifier = Modifier
-                .layout { measurable, constraints ->
-                    val extra = sidePadding.roundToPx() * 2
-                    val placeable = measurable.measure(
-                        constraints.copy(maxWidth = constraints.maxWidth + extra)
-                    )
-                    layout(constraints.maxWidth, placeable.height) {
-                        placeable.place(-extra / 2, 0)
+        BoxWithConstraints(
+            modifier = Modifier.layout { measurable, constraints ->
+                val extra = sidePadding.roundToPx() * 2
+                val placeable = measurable.measure(
+                    constraints.copy(maxWidth = constraints.maxWidth + extra)
+                )
+                layout(constraints.maxWidth, placeable.height) {
+                    placeable.place(-extra / 2, 0)
+                }
+            }
+        ) {
+            val viewport = constraints.maxWidth
+
+            Layout(
+                content = content,
+                modifier = Modifier.horizontalScroll(rememberScrollState())
+            ) { measurables, scrollConstraints ->
+                val pad = sidePadding.roundToPx()
+                val gap = spacing.roundToPx()
+                val count = measurables.size
+
+                val naturalWidths = measurables.map { it.maxIntrinsicWidth(0) }
+                val gaps = gap * (count - 1).coerceAtLeast(0)
+                val contentWidth = naturalWidths.sum() + gaps + pad * 2
+
+                val equalWidth = if (count > 0 && contentWidth < viewport) {
+                    val widest = naturalWidths.max()
+                    maxOf(widest, (viewport - pad * 2 - gaps) / count)
+                } else null
+
+                val placeables = measurables.map { m ->
+                    if (equalWidth != null) {
+                        m.measure(
+                            Constraints(
+                                minWidth = equalWidth,
+                                maxWidth = equalWidth,
+                                minHeight = 0,
+                                maxHeight = scrollConstraints.maxHeight
+                            )
+                        )
+                    } else {
+                        m.measure(scrollConstraints.copy(minWidth = 0, minHeight = 0))
                     }
                 }
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = sidePadding),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            content = content
-        )
+
+                val width = if (equalWidth != null) {
+                    maxOf(viewport, equalWidth * count + gaps + pad * 2)
+                } else {
+                    placeables.sumOf { it.width } + gaps + pad * 2
+                }
+                val height = placeables.maxOfOrNull { it.height } ?: 0
+
+                layout(width, height) {
+                    var x = pad
+                    placeables.forEach { p ->
+                        p.placeRelative(x, (height - p.height) / 2)
+                        x += p.width + gap
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -562,7 +613,7 @@ private fun TypeChip(
         }
     }
 
-    Box {
+    Box(propagateMinConstraints = true) {
         AppChip(
             label = typeTitle(type.name),
             selected = selected,

@@ -44,8 +44,8 @@ private enum class Tab(
     Settings("settings", "Настройки", Icons.Outlined.Settings, Icons.Filled.Settings)
 }
 
-private const val RECIPE_ROUTE = "recipe/{id}"
-private const val EDIT_ROUTE = "edit?id={id}&typeId={typeId}&daytimeId={daytimeId}"
+private const val RECIPE_ROUTE = "recipe/{id}?drink={drink}"
+private const val EDIT_ROUTE = "edit?id={id}&typeId={typeId}&daytimeId={daytimeId}&drink={drink}"
 
 @Composable
 fun AppNavigation() {
@@ -112,9 +112,11 @@ fun AppNavigation() {
             composable(Tab.Home.route) { entry ->
                 val refresh by entry.savedStateHandle
                     .getStateFlow("refresh", false).collectAsState()
-                HomeScreen(
+                HomePager(
                     onRecipeClick = { id -> navController.navigate("recipe/$id") },
+                    onDrinkClick = { id -> navController.navigate("recipe/$id?drink=true") },
                     onCreate = { t, d -> navController.navigate("edit?id=-1&typeId=$t&daytimeId=$d") },
+                    onCreateDrink = { t -> navController.navigate("edit?id=-1&typeId=$t&daytimeId=-1&drink=true") },
                     refreshSignal = refresh,
                     onRefreshHandled = { entry.savedStateHandle["refresh"] = false }
                 )
@@ -127,7 +129,8 @@ fun AppNavigation() {
                 arguments = listOf(
                     navArgument("id") { type = NavType.IntType; defaultValue = -1 },
                     navArgument("typeId") { type = NavType.IntType; defaultValue = -1 },
-                    navArgument("daytimeId") { type = NavType.IntType; defaultValue = -1 }
+                    navArgument("daytimeId") { type = NavType.IntType; defaultValue = -1 },
+                    navArgument("drink") { type = NavType.BoolType; defaultValue = false }
                 ),
                 enterTransition = { slideInHorizontally(initialOffsetX = { it / 4 }) + fadeIn() },
                 popExitTransition = { slideOutHorizontally(targetOffsetX = { it / 4 }) + fadeOut() }
@@ -137,6 +140,7 @@ fun AppNavigation() {
                     recipeId = args?.getInt("id") ?: -1,
                     typeId = args?.getInt("typeId") ?: -1,
                     daytimeId = args?.getInt("daytimeId") ?: -1,
+                    drink = args?.getBoolean("drink") ?: false,
                     onBack = { navController.popBackStack() },
                     onSaved = {
                         navController.previousBackStackEntry?.savedStateHandle?.set("refresh", true)
@@ -152,7 +156,10 @@ fun AppNavigation() {
             }
             composable(
                 route = RECIPE_ROUTE,
-                arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                arguments = listOf(
+                    navArgument("id") { type = NavType.IntType },
+                    navArgument("drink") { type = NavType.BoolType; defaultValue = false }
+                ),
                 enterTransition = {
                     slideInHorizontally(initialOffsetX = { it / 4 }) + fadeIn()
                 },
@@ -161,14 +168,16 @@ fun AppNavigation() {
                 }
             ) { entry ->
                 val id = entry.arguments?.getInt("id") ?: 0
+                val drink = entry.arguments?.getBoolean("drink") ?: false
                 val refresh by entry.savedStateHandle
                     .getStateFlow("refresh", false).collectAsState()
                 RecipeScreen(
                     recipeId = id,
                     onBack = { navController.popBackStack() },
-                    onEdit = { t, d -> navController.navigate("edit?id=$id&typeId=$t&daytimeId=$d") },
+                    onEdit = { t, d -> navController.navigate("edit?id=$id&typeId=$t&daytimeId=$d&drink=$drink") },
                     refreshSignal = refresh,
-                    onRefreshHandled = { entry.savedStateHandle["refresh"] = false }
+                    onRefreshHandled = { entry.savedStateHandle["refresh"] = false },
+                    drink = drink
                 )
             }
         }

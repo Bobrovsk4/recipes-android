@@ -70,12 +70,13 @@ fun RecipeScreen(
     onEdit: (typeId: Int, daytimeId: Int) -> Unit,
     refreshSignal: Boolean,
     onRefreshHandled: () -> Unit,
+    drink: Boolean = false,
     viewModel: RecipeViewModel = viewModel()
 ) {
-    LaunchedEffect(recipeId) { viewModel.loadIfNeeded(recipeId) }
+    LaunchedEffect(recipeId) { viewModel.loadIfNeeded(recipeId, drink) }
     LaunchedEffect(refreshSignal) {
         if (refreshSignal) {
-            viewModel.load(recipeId)
+            viewModel.load(recipeId, drink)
             onRefreshHandled()
         }
     }
@@ -134,12 +135,13 @@ fun RecipeScreen(
                         color = scheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
-                    Button(onClick = { viewModel.load(recipeId) }) { Text("Повторить") }
+                    Button(onClick = { viewModel.load(recipeId, drink) }) { Text("Повторить") }
                 }
 
                 is RecipeState.Success -> RecipeContent(
                     recipe = state.recipe,
                     contentPadding = padding,
+                    drink = drink,
                     onCelebrate = { showFireworks = true }
                 )
             }
@@ -155,6 +157,7 @@ fun RecipeScreen(
 private fun RecipeContent(
     recipe: RecipeDetails,
     contentPadding: PaddingValues,
+    drink: Boolean,
     onCelebrate: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -168,12 +171,13 @@ private fun RecipeContent(
     val ingredients = remember(recipe) {
         recipe.ingredients.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }
     }
-    var checked by remember(recipe.id) { mutableStateOf(CheckStore.load(context, recipe.id)) }
+    val storeId = if (drink) -recipe.id else recipe.id
+    var checked by remember(storeId) { mutableStateOf(CheckStore.load(context, storeId)) }
 
     fun update(new: Set<String>) {
         val wasAll = ingredients.isNotEmpty() && ingredients.all { it in checked }
         checked = new
-        CheckStore.save(context, recipe.id, new)
+        CheckStore.save(context, storeId, new)
         val nowAll = ingredients.isNotEmpty() && ingredients.all { it in new }
         if (!wasAll && nowAll) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)

@@ -31,11 +31,23 @@ interface RecipeApi {
     @GET("api/items/{id}")
     suspend fun getRecipe(@Path("id") id: Int): RecipeDetails
 
+    @GET("api/drink_types")
+    suspend fun getDrinkTypes(): List<Type>
+
+    @GET("api/drinks")
+    suspend fun getDrinks(@Query("type") typeId: Int? = null): List<Recipe>
+
+    @GET("api/drinks/{id}")
+    suspend fun getDrink(@Path("id") id: Int): RecipeDetails
+
     @POST("api/items")
     suspend fun createRecipe(@Body body: ItemRequest): RecipeDetails
 
     @POST("api/types")
     suspend fun createType(@Body body: TypeRequest): Type
+
+    @POST("api/drinks")
+    suspend fun createDrink(@Body body: DrinkRequest): RecipeDetails
 
     @PUT("api/items/{id}")
     suspend fun updateRecipe(@Path("id") id: Int, @Body body: ItemRequest): RecipeDetails
@@ -43,9 +55,15 @@ interface RecipeApi {
     @PUT("api/types/{id}")
     suspend fun updateType(@Path("id") id: Int, @Body body: TypeRequest)
 
+    @PUT("api/drinks/{id}")
+    suspend fun updateDrink(@Path("id") id: Int, @Body body: DrinkRequest): RecipeDetails
+
     @DELETE("api/items/{id}")
     suspend fun deleteRecipe(@Path("id") id: Int)
 
     @DELETE("api/types/{id}")
     suspend fun deleteType(@Path("id") id: Int)
+
+    @DELETE("api/drinks/{id}")
+    suspend fun deleteDrink(@Path("id") id: Int)
 }

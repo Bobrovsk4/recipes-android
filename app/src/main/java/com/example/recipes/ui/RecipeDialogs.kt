@@ -22,12 +22,13 @@ fun DeleteDialog(
     recipe: Recipe,
     busy: Boolean,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    title: String = "Удалить рецепт?"
 ) {
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         shape = RoundedCornerShape(28.dp),
-        title = { Text("Удалить рецепт?") },
+        title = { Text(title) },
         text = { Text("«${recipe.name}» будет удалён без возможности восстановления.") },
         confirmButton = {
             TextButton(enabled = !busy, onClick = onConfirm) {
