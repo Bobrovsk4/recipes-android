@@ -103,6 +103,9 @@ fun SettingsScreen() {
                 )
             }
         }
+
+        // --- Карточка: акцентный цвет ---
+        AccentCard()
     }
 }
 
